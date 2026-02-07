@@ -1,1 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XMenu Releases</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; background:#0f172a; color:#e2e8f0; }
+      body { margin:0; min-height:100vh; display:grid; place-items:center; padding:32px 18px; background: radial-gradient(circle at top, #1e293b, #0f172a 65%); }
+      main { width:min(880px,100%); background: rgba(15,23,42,.85); border:1px solid rgba(148,163,184,.2); border-radius:22px; padding:24px; box-shadow: 0 30px 80px rgba(15,23,42,.45); display:grid; gap:16px; }
+      h1 { margin:0; font-size:1.5rem; }
+      .muted { color:#94a3b8; }
+      .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+      .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+      button, a.btn {
+        padding:10px 14px; border-radius:999px; border:1px solid rgba(148,163,184,.35);
+        background:transparent; color:#e2e8f0; font-weight:800; cursor:pointer; text-decoration:none;
+      }
+      button.active { background: linear-gradient(135deg, #38bdf8, #0ea5e9); color:#0f172a; border-color: transparent; }
+      .list { display:grid; gap:12px; margin-top:6px; }
+      .card { background: rgba(30,41,59,.6); border:1px solid rgba(148,163,184,.2); border-radius:18px; padding:16px; display:grid; gap:6px; }
+      .tag { display:inline-flex; align-items:center; gap:8px; font-weight:800; }
+      .tag small { color:#94a3b8; font-weight:700; }
+      .hidden { display:none; }
 
+      /* Loader overlay */
+      .overlay {
+        position:fixed; inset:0; display:grid; place-items:center;
+        background: rgba(15,23,42,.92); backdrop-filter: blur(10px); z-index:9999;
+      }
+      .loaderBox { width:min(420px, calc(100vw - 40px)); border:1px solid rgba(148,163,184,.25); border-radius:18px; padding:18px;
+        background: rgba(15,23,42,.9); box-shadow: 0 24px 70px rgba(15,23,42,.6); display:grid; gap:12px; }
+      .spin { width:22px; height:22px; border-radius:999px; border:2px solid rgba(148,163,184,.25); border-top-color:#38bdf8; animation: s .7s linear infinite; }
+      @keyframes s { to { transform: rotate(360deg); } }
+      .bar { height:10px; border-radius:999px; background: rgba(148,163,184,.18); overflow:hidden; border:1px solid rgba(148,163,184,.15); }
+      .bar > div { height:100%; width:0%; background: linear-gradient(90deg, #38bdf8, #0ea5e9); transition: width 180ms ease; }
+    </style>
+  </head>
+  <body>
+    <div class="overlay" id="overlay" aria-live="polite">
+      <div class="loaderBox">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div>
+            <div style="font-weight:900; color:#f8fafc;">Checking access</div>
+            <div class="muted" id="overlayMsg">Verifying account session…</div>
+          </div>
+          <div class="spin" aria-hidden="true"></div>
+        </div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="bar"></div>
+        </div>
+        <div class="muted" style="font-size:.9rem;" id="overlayPct">0%</div>
+      </div>
+    </div>
+
+    <main class="hidden" id="app">
+      <div class="row">
+        <div>
+          <h1>Releases</h1>
+          <div class="muted">Account required.</div>
+        </div>
+
+        <div class="controls">
+          <button id="newestBtn" class="active" type="button">Newest</button>
+          <button id="lastBtn" type="button">Last</button>
+          <button id="oldestBtn" type="button">Oldest</button>
+          <a class="btn" href="https://accounts.xmenu.dev/?returnTo=https%3A%2F%2Frls.xmenu.dev%2F">Account</a>
+        </div>
+      </div>
+
+      <div class="list" id="list"></div>
+    </main>
+
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      const SUPABASE_URL = "https://miivgganhzzqfzebmaxx.supabase.co";
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1paXZnZ2FuaHp6cWZ6ZWJtYXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyOTg0OTYsImV4cCI6MjA4NTg3NDQ5Nn0.WAB1I8f8B46WzgvTqNn_jFiMBUb-63LPtCpCMrAkCoY";
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const overlay = document.getElementById("overlay");
+      const overlayMsg = document.getElementById("overlayMsg");
+      const overlayPct = document.getElementById("overlayPct");
+      const bar = document.getElementById("bar");
+      const app = document.getElementById("app");
+
+      function setProgress(pct, msg) {
+        const p = Math.max(0, Math.min(100, pct));
+        bar.style.width = p + "%";
+        overlayPct.textContent = p + "%";
+        overlay.querySelector(".bar").setAttribute("aria-valuenow", String(p));
+        if (msg) overlayMsg.textContent = msg;
+      }
+
+      // Release data (static placeholders).
+      // Replace with real releases later if you add a DB table.
+      const releases = [
+        { version: "1.2.9", date: "2026-02-01", notes: "Placeholder notes." },
+        { version: "1.2.8", date: "2026-01-10", notes: "Placeholder notes." },
+        { version: "1.2.7", date: "2025-12-15", notes: "Placeholder notes." }
+      ];
+
+      const list = document.getElementById("list");
+      const newestBtn = document.getElementById("newestBtn");
+      const lastBtn = document.getElementById("lastBtn");
+      const oldestBtn = document.getElementById("oldestBtn");
+
+      function render(mode) {
+        newestBtn.classList.toggle("active", mode === "newest");
+        lastBtn.classList.toggle("active", mode === "last");
+        oldestBtn.classList.toggle("active", mode === "oldest");
+
+        let items = [...releases].sort((a,b) => new Date(b.date) - new Date(a.date)); // newest-first default
+
+        if (mode === "oldest") items = items.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+        if (mode === "last") items = items.length >= 2 ? [items[1]] : items; // “last” = previous release
+
+        list.innerHTML = "";
+        for (const r of items) {
+          const el = document.createElement("div");
+          el.className = "card";
+          el.innerHTML = `
+            <div class="tag">v${r.version} <small>${r.date}</small></div>
+            <div class="muted">${r.notes}</div>
+          `;
+          list.appendChild(el);
+        }
+      }
+
+      newestBtn.addEventListener("click", () => render("newest"));
+      lastBtn.addEventListener("click", () => render("last"));
+      oldestBtn.addEventListener("click", () => render("oldest"));
+
+      async function gate() {
+        setProgress(15, "Verifying account session…");
+
+        const { data } = await supabase.auth.getUser();
+        const user = data.user;
+
+        setProgress(55, "Checking permissions…");
+
+        if (!user) {
+          setProgress(85, "Redirecting to login…");
+          const url = "https://accounts.xmenu.dev/?returnTo=" + encodeURIComponent("https://rls.xmenu.dev/");
+          location.replace(url);
+          return;
+        }
+
+        setProgress(100, "Access granted.");
+        overlay.remove();
+        app.classList.remove("hidden");
+        render("newest");
+      }
+
+      gate();
+    </script>
+  </body>
+</html>
